@@ -1,30 +1,36 @@
 package com.example.note_spring.service;
 
 import com.example.note_spring.model.Note;
+import com.example.note_spring.repository.NoteRepository;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 
 import java.util.List;
+import java.util.Optional;
 
 @Service
 public class NoteServiceImpl implements NoteService{
 
+    @Autowired
+    NoteRepository noteRepository;
+
     @Override
     public List<Note> getAllWeb() {
-        return null;
+        return noteRepository.findAll();
     }
 
     @Override
     public void saveWeb(Note note) {
-
+        noteRepository.save(note);
     }
 
     @Override
-    public Note getByIdWeb(long id) {
-        return null;
+    public Optional<Note> getByIdWeb(long id) {
+        return noteRepository.findById(id);
     }
 
     @Override
     public void deleteByIdWeb(long id) {
-
+        noteRepository.deleteById(id);
     }
 }
