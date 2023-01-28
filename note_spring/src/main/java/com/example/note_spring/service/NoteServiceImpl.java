@@ -20,12 +20,12 @@ public class NoteServiceImpl implements NoteService{
     }
 
     @Override
-    public void saveWeb(Note note) {
+    public void createWeb(Note note) {
         noteRepository.save(note);
     }
 
     @Override
-    public Optional<Note> getByIdWeb(long id) {
+    public Optional<Note> getByIdWeb(Long id) {
         return noteRepository.findById(id);
     }
 

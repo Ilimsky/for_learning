@@ -7,7 +7,7 @@ import java.util.Optional;
 
 public interface NoteService {
     List<Note> getAllWeb();
-    void saveWeb(Note note);
-    Optional<Note> getByIdWeb(long id);
+    void createWeb(Note note);
+    Optional<Note> getByIdWeb(Long id);
     void deleteByIdWeb(long id);
 }

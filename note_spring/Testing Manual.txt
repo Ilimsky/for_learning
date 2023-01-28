@@ -1,0 +1,409 @@
+Unit and Integration Testing in Spring Boot Micro Service
+
+Let’s write tests using Mockito and Junit
+
+Unit Tests
+    • Unit test — in which the smallest testable parts of an application, called units, are individually and independently tested for proper operation.
+    • We need to perform mocking operations. Not real ones! Reason for that is our unit tests should not affect the other parts of the application. Ex: if we only test the controller layer, it should not affect service layer.
+Tools used
+    • Mockito — mocking framework widely used to mock the operations in a Test-Driven Development(TDD) environment. Works perfectly together with Junit.
+    • Junit — test assertion framework to write test cases.
+
+WRITE UNIT TESTS: SERVICE LAYER
+In this layer, we are going to isolate the service layer and test the service methods. Mock annotation will create a mock object of the Service layer. ExtendWith extension is used to simulate test environment.
+@ExtendWith(SpringExtension.class)
+public class NoteServiceImplTest {
+
+    @Mock
+    NoteRepository noteRepository;
+
+    @InjectMocks
+    NoteService noteService = new NoteServiceImpl();
+
+}
+ Let’s write a test for the method to fetch Notes.
+I have created 2 notes and added into a list. Then I have used Mockito when() clause to mock the behavior.
+Next part is different here. We are using Junit Assertions in the service layer tests. We can assert for equality / not equality / NULL scenarios. First parameter is always expected value and the second is actual value.
+We do not need MockMvc here since this is one step down from web layer.
+
+    @Test
+    void getAllWeb() {
+        Note note1 = new Note(6L, "Title6", "Description6");
+        Note note2 = new Note(7L, "Title7", "Description7");
+        when(noteService.getAllWeb()).thenReturn(Arrays.asList(note1, note2));
+        assertEquals(noteService.getAllWeb().size(), 2);
+        assertEquals(noteService.getAllWeb().get(0).getTitle(), "Title6");
+        assertEquals(noteService.getAllWeb().get(1).getTitle(), "Title7");
+        assertEquals(noteService.getAllWeb().get(0).getDescription(), "Description6");
+        assertEquals(noteService.getAllWeb().get(1).getDescription(), "Description7");
+        assertNotEquals(noteService.getAllWeb().get(0), null);
+        assertNotEquals(noteService.getAllWeb().get(1), null);
+    }
+
+ Let’s write a service test for the method to fetch Note by ID. Nothing new is there.
+
+    @Test
+    void getByIdWeb() {
+        Note note = new Note(7L, "Title7", "Description7");
+        when(noteRepository.findById(7L)).thenReturn(Optional.of(note));
+        Optional<Note> noteById = noteService.getByIdWeb(7L);
+        assertNotEquals(noteById, null);
+        assertEquals(noteById.get().getTitle(), "Title7");
+        assertEquals(noteById.get().getDescription(), "Description7");
+    }
+
+ Let’s write a service test for fetching invalid Note. There we have to expect a NoteNotFoundException since the ID is not available in the DB. This is a negative test case. Here, assertThrows() can be used to throw an exception deliberately and compare it with the actual value in the exception message. I have checked the string message content equality.
+
+    @Test
+    public void testGetInvalidNoteById() {
+        when(noteService.getByIdWeb(17L)).thenThrow(new NoteNotFoundException("Note Not Found with ID"));
+        Exception exception = assertThrows(NoteNotFoundException.class, () -> {
+            noteService.getByIdWeb(17L);
+        });
+        assertFalse(exception.getMessage().contains("Note Not Found with ID"));
+    }
+
+ Let’s write a service test for creating a new Note. In this scenario, there are some new things to learn! 😎
+
+    @Test
+    void createWeb() {
+        Note note = new Note(12L, "Title12", "Description12");
+        noteService.createWeb(note);
+        verify(noteRepository, Mockito.times(1)).save(note);
+        ArgumentCaptor<Note> noteArgumentCaptor = ArgumentCaptor.forClass(Note.class);
+        verify(noteRepository).save(noteArgumentCaptor.capture());
+        Note noteCreated = noteArgumentCaptor.getValue();
+        assertNotNull(noteCreated.getId());
+        assertEquals("Title12", noteCreated.getTitle());
+    }
+
+Here I have omitted the when() clause like we did before. We just need to call the method since the create method is not returning anything.
+Mockito provides verify() method to assure the behavior of a method call.
+
+verify(noteRepository, Mockito.times(1)).save(note);
+
+The above line may verify that the method is called only once!
+ArgumentCaptor is used to capture arguments for mocked methods. Since the POST API call is returning an order object, I have provided ArgumentCaptor type as Note.
+
+verify(noteRepository).save(noteArgumentCaptor.capture());
+
+The above line will verify that the mocking service will take an Note object and perform the service method. Then I have taken the captor value out of it and compared with the actual value.
+
+Note noteCreated = noteArgumentCaptor.getValue();
+assertNotNull(noteCreated.getId());
+assertEquals("Title12", noteCreated.getTitle());
+
+ Let’s write a service test for deleting an Note. Same sort of code is followed here also like we tested POST service method. Here, the type of ArgumentCaptor is taken as Long since the service method is accepting a Long ID. AS we did before, again captor value is compared with actual!
+
+    @Test
+    void deleteAll(){
+        Note note = new Note(12L, "Title12", "Description12");
+        when(noteRepository.findById(12L)).thenReturn(Optional.of(note));
+        noteService.deleteByIdWeb(note.getId());
+        verify(noteRepository, Mockito.times(1)).deleteById(12L);
+        ArgumentCaptor<Long> noteArgumentCaptor = ArgumentCaptor.forClass(Long.class);
+        verify(noteRepository).deleteById(noteArgumentCaptor.capture());
+        Long noteIdDeleted = noteArgumentCaptor.getValue();
+        assertNotNull(noteIdDeleted);
+        assertEquals(12L, noteIdDeleted);
+    }
+Now basic test cases for service are DONE! ❤️
+
+
+WRITE UNIT TESTS: CONTROLLER LAYER
+Since our APIs are ready, we should be having a controller layer. As I told before, while writing unit tests for controller layer, we should make sure that the other layers(repository/service) are not affected(затронутый). And we have to mock objects!
+This is the basic structure of controller test class!
+
+@ExtendWith(SpringExtension.class)
+@WebMvcTest(NoteController.class)
+public class NoteControllerUnitTest {
+
+    @Autowired
+    private MockMvc mockMvc;
+
+    @MockBean
+    private NoteService orderService;
+
+}
+    • Using WebMvcTest annotation will disable full auto-configuration and instead apply only configuration relevant to MVC tests (i.e. @Controller, @ControllerAdvice, @JsonComponent, Converter/GenericConverter, Filter, WebMvcConfigurer and HandlerMethodArgumentResolver beans but not @Component, @Service or @Repository beans) — source: Java doc
+    • SpringExtension integrates the Spring TestContext Framework into JUnit 5’s Jupiter programming model.
+    • MockMVC class is part of Spring MVC test framework which helps in testing the controllers explicitly starting a Servlet container.
+    • MockBean is used to add mock objects to the Spring application context. This way to can create dummies and perform operations. We need to inject a mock of the Service here to perform a mocking behavior. It will be discussed later.
+ Let’s write a test for the method to fetch Notes.
+@Test
+public void testGetNoteList() throws Exception {
+    when(orderService.getNote()).thenReturn(Collections.singletonList(order));
+    mockMvc.perform(get("/api/orders"))
+        .andDo(print())
+        .andExpect(status().isOk())
+        .andExpect(content().contentType(MediaType.APPLICATION_JSON))
+        .andExpect(jsonPath("$", hasSize(1)))
+        .andExpect(jsonPath("$").isArray());
+}
+I will explain line by line here… 😎
+Mockito When clause
+Mockito provides us a way to simulate the actual behavior. It is formatted like this…
+when(something happens).thenReturn(do something)
+// OR thenThrow(exception)
+Here, we should call order service layer and get orders inside when() clause. That method should return the response we put inside thenReturn(). After this line, this test method will perform a mock operation runtime and prepare a list of orders for the next step.
+then we call MockMvc object and perform a GET API call using the relevant URL. We can then bind(связывать) any number of ResultActions to this API call.
+— andDo(print()): Print the result — andExpect(): Setup expected results in various(различный) aspects like response body, response format, response status code and etc.
+I have checked these points: — API is returning 200 code => isOk() method — Response content is a JSON => content() method — Response JSON contains an array or not => isArray() method — Response size is 1 or not => hasSize() method
+🔴 Here, “$” means the response JSON root level. Since this GET API is returning response as this, we have to use that notation.
+[
+    {
+        "id": 1,
+        "buyer": "peter",
+        "price": 30.0,
+        "qty": 3
+    }
+]
+If we have the results with a different nested(вложенный) format, we should use relevant keys. Let’s assume(предполагать) we include results inside “data” key.
+{
+    "data": [
+       {
+            "id": 1,
+            "buyer": "peter",
+            "price": 30.0,
+            "qty": 3
+        }
+    ]
+}
+Then we should change code like this:
+.andExpect(jsonPath("$.data", hasSize(1)))
+.andExpect(jsonPath("$.data").isArray());
+ Let’s write a test for fetching Note. It will follow the same. Only change would be response format — Object instead of Array.
+@Test
+public void testGetNoteById() throws Exception {
+    when(orderService.getNoteById(10L)).thenReturn(order);
+    mockMvc.perform(get("/api/orders/10"))
+        .andDo(print())
+        .andExpect(status().isOk())
+        .andExpect(content().contentType(MediaType.APPLICATION_JSON))
+        .andExpect(jsonPath("$.buyer", is("andrew")))
+        .andExpect(jsonPath("$.id", is(10)))
+        .andExpect(jsonPath("$").isNotEmpty());
+}
+ Let’s write a test for creating a new Note. It is also same but this time MockMvc will perform a POST call with a method body! We have to provide a JSON string as body. So we need to convert our Pojo to a JSON string. We can use the Object Mapper from Jackson library.
+private final ObjectMapper objectMapper = new ObjectMapper();
+I have created POST API to return 201 status code. So, inside Result actions, I used isCreated() — 201 method to match response status instead of isOk() — 200 method.
+@Test
+public void testCreateNote() throws Exception {
+    when(orderService.createNote(order)).thenReturn(order);
+    mockMvc.perform(
+        post("/api/orders")
+            .content(objectMapper.writeValueAsString(order))
+            .contentType(MediaType.APPLICATION_JSON)
+        )
+        .andDo(print())
+        .andExpect(status().isCreated())
+        .andExpect(content().contentType(MediaType.APPLICATION_JSON))
+        .andExpect(jsonPath("$.buyer", is("andrew")))
+        .andExpect(jsonPath("$.id", is(10)))
+        .andExpect(jsonPath("$").isNotEmpty());
+}
+ Let’s write a test for the method to delete an Note.
+@Test
+public void testDeleteNote() throws Exception {
+    Note order = new Note(10L, "andrew", 40.0, 2);
+    when(orderService.deleteNoteById(order.getId())).thenReturn(true);
+    mockMvc.perform(delete("/api/orders/" + order.getId()))
+        .andDo(print())
+        .andExpect(status().isOk());
+}
+Same thing goes here. Nothing special! Here we return a boolean in the controller method for DELETE. 😎
+Now basic test cases for controller are DONE! ❤️
+Completed code for controller unit test can be found here: https://github.com/SalithaUCSC/spring-boot-testing/blob/main/src/test/java/com/rest/order/NoteControllerUnitTest.java
+Now run the test class and see the results… 💪 All are passing! 😍
+
+
+Completed code for service unit test can be found here: https://github.com/SalithaUCSC/spring-boot-testing/blob/main/src/test/java/com/rest/order/NoteServiceUnitTest.java
+Now run the test class and see the results… 💪 All are passing! 😍
+
+Let’s write Integration tests guys!!! 💪
+Write Integration Tests
+As I mentioned(упомянул) before, this is not like a Unit test. We have to change the whole approach in this scenario. The purpose of writing integration test for our order service is making sure that order related functionalities are working fine connecting all the layers in the flow. Layers will be controller, service, repository, entity, exceptions configurations and etc.
+So we cannot mock here…right! We have to do some real operations. Let’s setup the class for this first.
+package com.rest.order;
+
+import com.fasterxml.jackson.core.JsonProcessingException;
+import com.fasterxml.jackson.databind.ObjectMapper;
+import com.rest.order.models.Note;
+import com.rest.order.repositories.NoteRepository;
+import com.rest.order.services.NoteService;
+import org.junit.jupiter.api.BeforeAll;
+import org.junit.jupiter.api.Test;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.boot.test.context.SpringBootTest;
+import org.springframework.boot.test.web.client.TestRestTemplate;
+import org.springframework.boot.test.web.server.LocalServerPort;
+import org.springframework.core.ParameterizedTypeReference;
+import org.springframework.http.*;
+import org.springframework.test.context.jdbc.Sql;
+
+import java.util.List;
+import java.util.Objects;
+
+import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertNotNull;
+
+
+@SpringBootTest(webEnvironment = SpringBootTest.WebEnvironment.RANDOM_PORT)
+public class NoteApiIntegrationTest {
+
+    	@LocalServerPort
+	private int port;
+
+	@Autowired
+	private TestRestTemplate restTemplate;
+
+	@Autowired
+	private NoteRepository orderRepository;
+
+	@Autowired
+	private NoteService orderService;
+
+	private static HttpHeaders headers;
+
+	private final ObjectMapper objectMapper = new ObjectMapper();
+
+	@BeforeAll
+	public static void init() {
+    		headers = new HttpHeaders();
+    	headers.setContentType(MediaType.APPLICATION_JSON);
+	}
+
+	@Test
+	@Sql(statements = "INSERT INTO orders(id, buyer, price, qty) VALUES (22, 'john', 24.0, 1)", executionPhase = Sql.ExecutionPhase.BEFORE_TEST_METHOD)
+	@Sql(statements = "DELETE FROM orders WHERE id='22'", executionPhase = Sql.ExecutionPhase.AFTER_TEST_METHOD)
+	public void testNoteList() {
+    	HttpEntity<String> entity = new HttpEntity<>(null, headers);
+    	ResponseEntity<List<Note>> response = restTemplate.exchange(
+            createURLWithPort(), HttpMethod.GET, entity, new 			ParameterizedTypeReference<List<Note>>(){});
+    	List<Note> orderList = response.getBody();
+    	assert orderList != null;
+    	assertEquals(response.getStatusCodeValue(), 200);
+    	assertEquals(orderList.size(), orderService.getNote().size());
+    	assertEquals(orderList.size(), orderRepository.findAll().size());
+	}
+
+	@Test
+	@Sql(statements = "INSERT INTO orders(id, buyer, price, qty) VALUES (20, 'sam', 50.0, 4)", executionPhase = Sql.ExecutionPhase.BEFORE_TEST_METHOD)
+	@Sql(statements = "DELETE FROM orders WHERE id='20'", executionPhase = Sql.ExecutionPhase.AFTER_TEST_METHOD)
+	public void testNoteById() throws JsonProcessingException {
+    	HttpEntity<String> entity = new HttpEntity<>(null, headers);
+    	ResponseEntity<Note> response = restTemplate.exchange(
+            (createURLWithPort() + "/20"), HttpMethod.GET, entity, Note.class);
+    	Note orderRes = response.getBody();
+    	String expected = "{\"id\":20,\"buyer\":\"sam\",\"price\":50.0,\"qty\":4}";
+    	assertEquals(response.getStatusCodeValue(), 200);
+    	assertEquals(expected, objectMapper.writeValueAsString(orderRes));
+    	assert orderRes != null;
+    	assertEquals(orderRes, orderService.getNoteById(20L));
+    	assertEquals(orderRes.getBuyer(), orderService.getNoteById(20L).getBuyer());
+    	assertEquals(orderRes, orderRepository.findById(20L).orElse(null));
+	}
+
+	@Test
+	@Sql(statements = "DELETE FROM orders WHERE id='3'", executionPhase = Sql.ExecutionPhase.AFTER_TEST_METHOD)
+	public void testCreateNote() throws JsonProcessingException {
+    	Note order = new Note(3L, "peter", 30.0, 3);
+    	HttpEntity<String> entity = new HttpEntity<>(objectMapper.writeValueAsString(order), headers);
+    	ResponseEntity<Note> response = restTemplate.exchange(
+            createURLWithPort(), HttpMethod.POST, entity, Note.class);
+    	assertEquals(response.getStatusCodeValue(), 201);
+    	Note orderRes = Objects.requireNonNull(response.getBody());
+    	assertEquals(orderRes.getBuyer(), "peter");
+    	assertEquals(orderRes.getBuyer(), orderRepository.save(order).getBuyer());
+	}
+
+	@Test
+	@Sql(statements = "INSERT INTO orders(id, buyer, price, qty) VALUES (6, 'alex', 75.0, 3)", executionPhase = Sql.ExecutionPhase.BEFORE_TEST_METHOD)
+	@Sql(statements = "DELETE FROM orders WHERE id='6'", executionPhase = Sql.ExecutionPhase.AFTER_TEST_METHOD)
+	public void testDeleteNote() {
+    	ResponseEntity<String> response = restTemplate.exchange(
+            (createURLWithPort() + "/6"), HttpMethod.DELETE, null, String.class);
+    	String orderRes = response.getBody();
+    	assertEquals(response.getStatusCodeValue(), 200);
+    	assertNotNull(orderRes);
+    	assertEquals(orderRes, "Note deleted - Note ID:6");
+	}
+
+	private String createURLWithPort() {
+    		return "http://localhost:" + port + "/orders";
+	}
+}
+SpringBootTest annotation loads the complete Spring application context and provides a mock web environment. I have given an additional condition for that to start the mock web environment on a random port!
+LocalServerPort annotation is used to bind(связывать) that port to the API URL. Then I have constructed the URL in a separate method which can be reused in the whole class.
+Now I have injected the real service and repository layers — not like previous. I have used Autowired annotation instead Mock or MockBean!
+TestRestTemplate is the testing version class of RestTemplate class. If you don’t what is the purpose of Rest Template, please read this: https://medium.com/@salithachathuranga94/rest-template-with-spring-boot-e2001a8219e6
+We can simply use TestRestTemplate to perform API calls via the entire(весь) application!
+ Let’s write an integration test for the method to fetch Note.
+@Test
+@Sql(statements = "INSERT INTO orders(id, buyer, price, qty) VALUES (2, 'john', 24, 1)", executionPhase = Sql.ExecutionPhase.BEFORE_TEST_METHOD)
+@Sql(statements = "DELETE FROM orders WHERE id='2'", executionPhase = Sql.ExecutionPhase.AFTER_TEST_METHOD)
+public void testNoteList() {
+    HttpEntity<String> entity = new HttpEntity<>(null, headers);
+    ResponseEntity<List<Note>> response = restTemplate.exchange(
+            createURLWithPort(), HttpMethod.GET, entity, new ParameterizedTypeReference<List<Note>>(){});
+    List<Note> orderList = response.getBody();
+    assert orderList != null;
+    assertEquals(response.getStatusCodeValue(), 200);
+    assertEquals(orderList.size(), orderService.getNote().size());
+    assertEquals(orderList.size(), orderRepository.findAll().size());
+}
+Something new is here right? 😎
+You should see “Sql” annotation. What is the purpose of it? Well…I told you we are going to perform real actions. So, we should make sure that our database is not polluted after running an integration test by anyone in the dev team! Data should not be changed! We can use this annotation for each test method and tell Spring Boot that we need to execute some manual SQL commands while running the test.
+Ex: If we create a new Note while testing POST API call, what will happen? Unexpected data is there right? Then we have changed the original data! It’s not correct…So what we should do? After running the test case, we should delete that order! Simple! 😃
+I have used 2️ SQL commands to create and remove each test object. We can provide a parameter called executionPhase. It will take cake at what stage application should perform the SQL command. So I have used BEFORE_TEST_METHOD for SAVE and AFTER_TEST_METHOD for DELETE.
+    • I have used exchange method in TestRestTemplate class. In this method, I’m expecting a List of Note.
+    • Here, HttpEntity object is needed to send as a parameter. Since GET call does not need a body, I have created it with NULL body.
+    • Headers have been initialized inside BeforeAll test annotation.
+Then we just need to compare response with direct method call to service and repository layers. Status code also checked whether its 200 or not. Then we can guarantee that if anyone call the API from external source, it will give the correct result as same as repository and service individually gives.
+assertEquals(orderList.size(), orderService.getNote().size());
+assertEquals(orderList.size(), orderRepository.findAll().size());
+Since I have inserted only 1 object using SQL command, this test will assure that the response size is 1.
+ Let’s write an integration test for the method to fetch Note by ID. We need to modify the URL since now it’s taking a path variable! Same as previous, we need to call through rest and compare the response with service, repository method calls.
+@Test
+@Sql(statements = "INSERT INTO orders(id, buyer, price, qty) VALUES (20, 'sam', 50, 4)", executionPhase = Sql.ExecutionPhase.BEFORE_TEST_METHOD)
+@Sql(statements = "DELETE FROM orders WHERE id='20'", executionPhase = Sql.ExecutionPhase.AFTER_TEST_METHOD)
+public void testNoteById() throws JsonProcessingException {
+    HttpEntity<String> entity = new HttpEntity<>(null, headers);
+    ResponseEntity<Note> response = restTemplate.exchange(
+            (createURLWithPort() + "/20"), HttpMethod.GET, entity, Note.class);
+    Note orderRes = response.getBody();
+    String expected = "{\"id\":20,\"buyer\":\"sam\",\"price\":50.0,\"qty\":4}";
+    assertEquals(response.getStatusCodeValue(), 200);
+    assertEquals(expected, objectMapper.writeValueAsString(orderRes));
+    assert orderRes != null;
+    assertEquals(orderRes, orderService.getNoteById(20L));
+    assertEquals(orderRes.getBuyer(), orderService.getNoteById(20L).getBuyer());
+    assertEquals(orderRes, orderRepository.findById(20L).orElse(null));
+}
+ Let’s write an integration test for the method to create a new Note. In this case we use a POST call. Then we have to provide a method body. There we have to update HttpEntity with the order object converted into a JSON string.
+And we don’t need 2 SQL commands. Why? Because we are creating and saving an object inside method itself. So, we just need to delete it after test method is executed.
+@Test
+@Sql(statements = "DELETE FROM orders WHERE id='3'", executionPhase = Sql.ExecutionPhase.AFTER_TEST_METHOD)
+public void testCreateNote() throws JsonProcessingException {
+    Note order = new Note(3L, "peter", 30.0, 3);
+    HttpEntity<String> entity = new HttpEntity<>(objectMapper.writeValueAsString(order), headers);
+    ResponseEntity<Note> response = restTemplate.exchange(
+            createURLWithPort(), HttpMethod.POST, entity, Note.class);
+    assertEquals(response.getStatusCodeValue(), 201);
+    Note orderRes = Objects.requireNonNull(response.getBody());
+    assertEquals(orderRes.getBuyer(), "peter");
+    assertEquals(orderRes.getBuyer(), orderRepository.save(order).getBuyer());
+}
+Let’s write an integration test for the method to delete an Note. Test should be written using DELETE type in the exchange method. We need to modify the URL since now it’s taking a path variable! I’m returning a string in controller layer for delete method. So, I have checked that string for verification using Junit.
+@Test
+@Sql(statements = "INSERT INTO orders(id, buyer, price, qty) VALUES (6, 'alex', 75, 3)", executionPhase = Sql.ExecutionPhase.BEFORE_TEST_METHOD)
+@Sql(statements = "DELETE FROM orders WHERE id='6'", executionPhase = Sql.ExecutionPhase.AFTER_TEST_METHOD)
+public void testDeleteNote() {
+    ResponseEntity<String> response = restTemplate.exchange(
+            (createURLWithPort() + "/6"), HttpMethod.DELETE, null, String.class);
+    String orderRes = response.getBody();
+    assertEquals(response.getStatusCodeValue(), 200);
+    assertNotNull(orderRes);
+    assertEquals(orderRes, "Note deleted - Note ID:6");
+}
+Now all the integration cases for our micro service are COMPLETED!
