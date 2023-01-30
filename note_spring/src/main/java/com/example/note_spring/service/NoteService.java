@@ -10,4 +10,9 @@ public interface NoteService {
     void createWeb(Note note);
     Optional<Note> getByIdWeb(Long id);
     void deleteByIdWeb(long id);
+
+    List<Note> getAllMobile();
+    void createMobile(Note note);
+    Optional<Note> getByIdMobile(Long id);
+    void deleteByIdMobile(long id);
 }
