@@ -55,10 +55,10 @@ class NoteServiceImplTest {
     @Test
     void getByIdWeb() {
         when(noteRepository.findById(testId)).thenReturn(Optional.of(note2));
-        Optional<Note> noteById = noteService.getByIdWeb(testId);
+        Note noteById = noteService.getByIdWeb(testId);
         assertNotEquals(noteById, null);
-        assertEquals(noteById.get().getTitle(), "Title7");
-        assertEquals(noteById.get().getDescription(), "Description7");
+        assertEquals(noteById.getTitle(), "Title7");
+        assertEquals(noteById.getDescription(), "Description7");
     }
 
     @Test

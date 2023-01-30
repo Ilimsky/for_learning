@@ -25,8 +25,15 @@ public class NoteServiceImpl implements NoteService {
     }
 
     @Override
-    public Optional<Note> getByIdWeb(Long id) {
-        return noteRepository.findById(id);
+    public Note getByIdWeb(Long id) {
+        Optional<Note> optional = noteRepository.findById(id);
+        Note note = null;
+        if (optional.isPresent()){
+            note = optional.get();
+        }else {
+            throw new RuntimeException("Note not found id:" + id);
+        }
+        return note;
     }
 
     @Override

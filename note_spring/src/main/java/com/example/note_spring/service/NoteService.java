@@ -8,7 +8,7 @@ import java.util.Optional;
 public interface NoteService {
     List<Note> getAllWeb();
     void createWeb(Note note);
-    Optional<Note> getByIdWeb(Long id);
+    Note getByIdWeb(Long id);
     void deleteByIdWeb(long id);
 
     List<Note> getAllMobile();
